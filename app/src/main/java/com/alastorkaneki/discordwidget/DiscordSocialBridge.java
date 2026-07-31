@@ -130,16 +130,32 @@ public final class DiscordSocialBridge {
 
     public String getRedirectUri() {
         return applicationIdConfigured
-                ? "discord-" + BuildConfig.DISCORD_APPLICATION_ID + ":/authorize/callback"
+                ? DiscordOAuthManager.getRedirectUri()
                 : "discord-APPLICATION_ID:/authorize/callback";
     }
 
-    public void connect() {
+    public void connect(Activity activity) {
         if (!available) {
             dispatchError(unavailableReason);
             return;
         }
-        nativeConnect();
+        try {
+            DiscordOAuthManager.start(activity);
+        } catch (Throwable error) {
+            dispatchError(appContext.getString(R.string.oauth_no_browser));
+        }
+    }
+
+    public void exchangeAuthorizationCode(
+            String code,
+            String verifier,
+            String redirectUri
+    ) {
+        if (!available) {
+            dispatchError(unavailableReason);
+            return;
+        }
+        nativeExchangeAuthorizationCode(code, verifier, redirectUri);
     }
 
     public void refreshDirectMessages() {
@@ -222,7 +238,11 @@ public final class DiscordSocialBridge {
     }
 
     private static native boolean nativeInitialize(long applicationId, DiscordSocialBridge bridge);
-    private static native void nativeConnect();
+    private static native void nativeExchangeAuthorizationCode(
+            String code,
+            String verifier,
+            String redirectUri
+    );
     private static native void nativeRestoreSession(
             String accessToken,
             String refreshToken,
