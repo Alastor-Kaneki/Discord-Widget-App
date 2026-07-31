@@ -1,0 +1,32 @@
+name: Preserve Discord Social SDK
+
+on:
+  push:
+    branches:
+      - agent/oauth-session-messaging
+
+permissions:
+  contents: read
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    env:
+      SDK_URL: "https://storage.googleapis.com/discord-slayer-sdk-artifacts/discord_partner_sdk/4b32d8349d0a127af011f26eebb722ff0646f856/release/DiscordSocialSdk-1.10.18247.zip?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=slayer-sdk-token-creator%40discord-production.iam.gserviceaccount.com%2F20260731%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260731T210958Z&X-Goog-Expires=3600&X-Goog-SignedHeaders=host&X-Goog-Signature=7f73b2733634b5af292c2d865f15315ec27717e35d0c5f5b3801f13c2239c277056b303c690a359b27116dd2bc54ce64e963579a8613f9b0ec7de23f80353b6f8a8fbb3a3a6db4bd62b98ee978f58605920f55c87f98b28bf5d103efe7c3429a3033c5492f4e23603cc33bcb995f2906d975eb1dc34e805470bad0c42536cc3c6ce08884755d8d504d357747185a82309467293fb90f2e26266059c3da02e148fd2fc6dbde1a9647f0b4b62d4ad664d3b3bddcf0495024cbd55f43e9bfe6697b894c3ec0910e92a92e7254cbd73bc04c60c84c80e2e7923f1b4272804e396b88b2812ee0a383dbf418f2a585e85532101097d0969882cb997601eb24be6629d8"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download SDK
+        run: |
+          mkdir -p sdk/unpacked
+          curl --fail --location --retry 3 --output sdk/DiscordSocialSdk-1.10.18247.zip "$SDK_URL"
+          unzip -q sdk/DiscordSocialSdk-1.10.18247.zip -d sdk/unpacked
+          AAR_PATH="$(find sdk/unpacked -type f -name 'discord_partner_sdk.aar' | head -n 1)"
+          test -n "$AAR_PATH"
+          cp "$AAR_PATH" sdk/discord_partner_sdk.aar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Discord-Social-SDK-1.10.18247-private
+          path: |
+            sdk/DiscordSocialSdk-1.10.18247.zip
+            sdk/discord_partner_sdk.aar
+          if-no-files-found: error
