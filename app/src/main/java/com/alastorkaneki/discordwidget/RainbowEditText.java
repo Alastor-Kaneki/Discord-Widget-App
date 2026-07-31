@@ -2,6 +2,7 @@ package com.alastorkaneki.discordwidget;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 
 import androidx.appcompat.widget.AppCompatEditText;
@@ -26,6 +27,12 @@ public final class RainbowEditText extends AppCompatEditText {
 
     private void initialize(Context context) {
         outline = new RainbowOutlineDrawable(context, 16f, 2f);
+        outline.setCallback(this);
+    }
+
+    @Override
+    protected boolean verifyDrawable(Drawable drawable) {
+        return drawable == outline || super.verifyDrawable(drawable);
     }
 
     @Override
