@@ -6,15 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(discord_widget_bridge SHARED social_bridge.cpp)
 
-target_include_directories(discord_widget_bridge PRIVATE "${DISCORD_SDK_ROOT}/include")
-
-add_library(discord_partner_sdk SHARED IMPORTED)
-set_target_properties(
-    discord_partner_sdk
-    PROPERTIES
-    IMPORTED_LOCATION "${DISCORD_SDK_ROOT}/lib/${ANDROID_ABI}/libdiscord_partner_sdk.so"
-)
-
+find_package(discord_partner_sdk REQUIRED CONFIG)
 find_library(log_lib log)
 
-target_link_libraries(discord_widget_bridge discord_partner_sdk ${log_lib})
+target_link_libraries(
+    discord_widget_bridge
+    discord_partner_sdk::discord_partner_sdk
+    ${log_lib}
+)
