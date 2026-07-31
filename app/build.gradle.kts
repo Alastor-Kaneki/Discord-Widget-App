@@ -22,8 +22,8 @@ android {
         applicationId = "com.alastorkaneki.discordwidget"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.3.0"
         manifestPlaceholders["discordApplicationId"] = discordApplicationId
         buildConfigField("String", "DISCORD_APPLICATION_ID", "\"$discordApplicationId\"")
         buildConfigField("boolean", "SOCIAL_SDK_PRESENT", socialSdkPresent.toString())

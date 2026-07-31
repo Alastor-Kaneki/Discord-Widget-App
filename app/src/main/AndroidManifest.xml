@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
 
     <queries>
         <package android:name="com.discord" />
@@ -50,6 +52,11 @@
                 <data android:scheme="discord-${discordApplicationId}" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".DiscordMessagingService"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
 
         <service
             android:name=".DiscordNotificationListener"
