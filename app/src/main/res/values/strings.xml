@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">Discord Widget App</string>
+    <string name="notification_service_name">Discord widget notification access</string>
+    <string name="discord_conversation">Discord conversation</string>
+    <string name="connect_discord">Connect Discord with OAuth</string>
+    <string name="enable_notification_access">Enable notification access</string>
+    <string name="refresh">Refresh conversations and widgets</string>
+    <string name="conversations">Conversations</string>
+    <string name="conversation_hint">Tap a conversation to open or reply. Add the widget from the launcher and choose a conversation.</string>
+    <string name="social_ready_to_connect">OAuth messaging is available. Connect Discord to load supported DMs.</string>
+    <string name="notification_mode">Notification mode is active. Add the Discord Social SDK package to enable OAuth DMs.</string>
+    <string name="oauth_dm">OAuth DM</string>
+    <string name="notification_source">Discord notification</string>
+    <string name="discord_user_id">Discord user %1$s</string>
+    <string name="no_preview">No message preview</string>
+    <string name="message_sent">Message sent</string>
+    <string name="reply_unavailable">Discord did not provide a reply action for this notification. Open Discord to reply.</string>
+    <string name="select_conversation">Select a conversation</string>
+    <string name="no_conversations">No conversations yet. Enable notification access or connect through OAuth, then receive or refresh messages.</string>
+    <string name="widget_not_configured">Choose a Discord conversation</string>
+    <string name="widget_configure_hint">Remove and add this widget again to configure it.</string>
+    <string name="type_message">Type a message</string>
+    <string name="send">Send</string>
+    <string name="open_discord">Open Discord</string>
+    <string name="reply">Reply</string>
+</resources>

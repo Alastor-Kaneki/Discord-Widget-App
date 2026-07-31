@@ -1,0 +1,12 @@
+.gradle/
+.idea/
+local.properties
+**/build/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+app/discord_social_sdk/
+keystore.properties
+*.jks
+*.keystore
