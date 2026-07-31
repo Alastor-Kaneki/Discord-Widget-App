@@ -57,9 +57,6 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
         socialBridge = DiscordSocialBridge.get(this);
         socialBridge.initialize(this);
         connectButton.setEnabled(true);
-        connectButton.setText(socialBridge.isConnected()
-                ? R.string.discord_connected
-                : R.string.connect_discord);
         connectButton.setOnClickListener(view -> connectDiscord());
         notificationButton.setOnClickListener(view -> openNotificationAccess());
         notificationButton.setVisibility(socialBridge.isAvailable() ? View.GONE : View.VISIBLE);
@@ -71,19 +68,15 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
             ConversationWidgetProvider.updateAll(this);
         });
 
-        if (!socialBridge.isAvailable()) {
-            status.setText(getString(
-                    R.string.oauth_unavailable_status,
-                    socialBridge.getUnavailableReason()
-            ));
-        } else if (socialBridge.isConnected()) {
-            status.setText(R.string.discord_connected_status);
-        } else if (socialBridge.hasStoredSession()) {
-            status.setText(R.string.oauth_restoring_session);
-        } else {
-            status.setText(R.string.social_ready_to_connect);
-        }
+        updateConnectionUi();
         refreshList();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        socialBridge.initialize(this);
     }
 
     @Override
@@ -96,6 +89,16 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
             registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED);
         } else {
             registerReceiver(receiver, filter);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        socialBridge.initialize(this);
+        updateConnectionUi();
+        if (socialBridge.isConnected()) {
+            socialBridge.refreshDirectMessages();
         }
     }
 
@@ -136,6 +139,25 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
     @Override
     public void onMessageSent(String userId, long messageId) {
         runOnUiThread(() -> Toast.makeText(this, R.string.message_sent, Toast.LENGTH_SHORT).show());
+    }
+
+    private void updateConnectionUi() {
+        connectButton.setText(socialBridge.isConnected()
+                ? R.string.discord_connected
+                : R.string.connect_discord);
+        notificationButton.setVisibility(socialBridge.isAvailable() ? View.GONE : View.VISIBLE);
+        if (!socialBridge.isAvailable()) {
+            status.setText(getString(
+                    R.string.oauth_unavailable_status,
+                    socialBridge.getUnavailableReason()
+            ));
+        } else if (socialBridge.isConnected()) {
+            status.setText(R.string.discord_connected_status);
+        } else if (socialBridge.hasStoredSession()) {
+            status.setText(R.string.oauth_restoring_session);
+        } else {
+            status.setText(R.string.social_ready_to_connect);
+        }
     }
 
     private void connectDiscord() {
