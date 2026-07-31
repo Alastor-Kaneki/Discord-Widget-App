@@ -1,4 +1,4 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.alastorkaneki.discordwidget.RainbowLinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_card"
@@ -47,4 +47,4 @@
             android:textColor="@color/muted"
             android:textSize="12sp" />
     </LinearLayout>
-</LinearLayout>
+</com.alastorkaneki.discordwidget.RainbowLinearLayout>
