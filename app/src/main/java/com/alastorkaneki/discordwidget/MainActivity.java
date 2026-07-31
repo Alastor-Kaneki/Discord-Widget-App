@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.view.View;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -22,6 +23,8 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
 
     private ConversationAdapter adapter;
     private TextView status;
+    private Button connectButton;
+    private Button notificationButton;
     private DiscordSocialBridge socialBridge;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
@@ -37,8 +40,8 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
         setContentView(R.layout.activity_main);
 
         status = findViewById(R.id.statusText);
-        Button connectButton = findViewById(R.id.connectDiscordButton);
-        Button notificationButton = findViewById(R.id.notificationAccessButton);
+        connectButton = findViewById(R.id.connectDiscordButton);
+        notificationButton = findViewById(R.id.notificationAccessButton);
         Button refreshButton = findViewById(R.id.refreshButton);
         ListView list = findViewById(R.id.conversationList);
 
@@ -51,30 +54,43 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
             startActivity(intent);
         });
 
-        socialBridge = new DiscordSocialBridge(this, this);
+        socialBridge = DiscordSocialBridge.get(this);
+        socialBridge.initialize(this);
         connectButton.setEnabled(true);
-        connectButton.setText(socialBridge.isAvailable()
-                ? R.string.connect_discord
-                : R.string.configure_discord_oauth);
+        connectButton.setText(socialBridge.isConnected()
+                ? R.string.discord_connected
+                : R.string.connect_discord);
         connectButton.setOnClickListener(view -> connectDiscord());
         notificationButton.setOnClickListener(view -> openNotificationAccess());
+        notificationButton.setVisibility(socialBridge.isAvailable() ? View.GONE : View.VISIBLE);
         refreshButton.setOnClickListener(view -> {
             refreshList();
-            if (socialBridge.isAvailable()) {
+            if (socialBridge.isConnected()) {
                 socialBridge.refreshDirectMessages();
             }
             ConversationWidgetProvider.updateAll(this);
         });
 
-        status.setText(socialBridge.isAvailable()
-                ? getString(R.string.social_ready_to_connect)
-                : getString(R.string.oauth_unavailable_status, socialBridge.getUnavailableReason()));
+        if (!socialBridge.isAvailable()) {
+            status.setText(getString(
+                    R.string.oauth_unavailable_status,
+                    socialBridge.getUnavailableReason()
+            ));
+        } else if (socialBridge.isConnected()) {
+            status.setText(R.string.discord_connected_status);
+        } else if (socialBridge.hasStoredSession()) {
+            status.setText(R.string.oauth_restoring_session);
+        } else {
+            status.setText(R.string.social_ready_to_connect);
+        }
         refreshList();
     }
 
     @Override
     protected void onStart() {
         super.onStart();
+        socialBridge.initialize(this);
+        socialBridge.addListener(this);
         IntentFilter filter = new IntentFilter(ACTION_CONVERSATIONS_CHANGED);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED);
@@ -85,6 +101,7 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
 
     @Override
     protected void onStop() {
+        socialBridge.removeListener(this);
         unregisterReceiver(receiver);
         super.onStop();
     }
@@ -92,27 +109,20 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
     @Override
     public void onStatus(String value) {
         runOnUiThread(() -> {
-            status.setText(value);
             if ("ready".equalsIgnoreCase(value)) {
-                socialBridge.refreshDirectMessages();
+                status.setText(R.string.discord_connected_status);
+                connectButton.setText(R.string.discord_connected);
+                notificationButton.setVisibility(View.GONE);
+                refreshList();
+            } else {
+                status.setText(value);
             }
         });
     }
 
     @Override
     public void onConversation(String userId, String preview, long messageId) {
-        Conversation conversation = new Conversation(
-                "social:" + userId,
-                getString(R.string.discord_user_id, userId),
-                getString(R.string.oauth_dm),
-                preview,
-                System.currentTimeMillis(),
-                Conversation.SOURCE_SOCIAL_DM,
-                userId
-        );
-        ConversationStore.upsert(this, conversation);
         runOnUiThread(this::refreshList);
-        ConversationWidgetProvider.updateAll(this);
     }
 
     @Override
@@ -126,11 +136,14 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
     @Override
     public void onMessageSent(String userId, long messageId) {
         runOnUiThread(() -> Toast.makeText(this, R.string.message_sent, Toast.LENGTH_SHORT).show());
-        socialBridge.refreshDirectMessages();
     }
 
     private void connectDiscord() {
         if (socialBridge.isAvailable()) {
+            if (socialBridge.isConnected()) {
+                socialBridge.refreshDirectMessages();
+                return;
+            }
             status.setText(R.string.connecting_discord);
             socialBridge.connect();
             return;
@@ -142,13 +155,21 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
         String message = socialBridge.getUnavailableReason()
                 + "\n\n"
                 + getString(R.string.oauth_setup_requirements, socialBridge.getRedirectUri());
-        new AlertDialog.Builder(this)
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(R.string.oauth_setup_title)
                 .setMessage(message)
-                .setPositiveButton(R.string.open_developer_portal, (dialog, which) -> openDeveloperPortal())
-                .setNeutralButton(R.string.enable_notification_access, (dialog, which) -> openNotificationAccess())
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                .setPositiveButton(
+                        R.string.open_developer_portal,
+                        (dialog, which) -> openDeveloperPortal()
+                )
+                .setNegativeButton(android.R.string.cancel, null);
+        if (!socialBridge.isSdkBundled()) {
+            builder.setNeutralButton(
+                    R.string.optional_notification_fallback,
+                    (dialog, which) -> openNotificationAccess()
+            );
+        }
+        builder.show();
     }
 
     private void refreshList() {
