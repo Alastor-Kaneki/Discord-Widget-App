@@ -1,6 +1,7 @@
 package com.alastorkaneki.discordwidget;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
@@ -33,10 +34,30 @@ public final class ReplyActivity extends Activity implements DiscordSocialBridge
         Button open = findViewById(R.id.replyOpenDiscord);
 
         title.setText(conversation.title);
-        socialBridge = new DiscordSocialBridge(this, this);
+        socialBridge = DiscordSocialBridge.get(this);
+        socialBridge.initialize(this);
 
         send.setOnClickListener(view -> sendMessage());
-        open.setOnClickListener(view -> DiscordNotificationListener.open(this, conversation.key));
+        open.setOnClickListener(view -> openDiscord());
+        if (Conversation.SOURCE_SOCIAL_DM.equals(conversation.source)) {
+            send.setEnabled(socialBridge.isConnected());
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        socialBridge.initialize(this);
+        socialBridge.addListener(this);
+        if (Conversation.SOURCE_SOCIAL_DM.equals(conversation.source)) {
+            send.setEnabled(socialBridge.isConnected());
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        socialBridge.removeListener(this);
+        super.onStop();
     }
 
     private void sendMessage() {
@@ -45,9 +66,22 @@ public final class ReplyActivity extends Activity implements DiscordSocialBridge
             return;
         }
         send.setEnabled(false);
-        if (Conversation.SOURCE_SOCIAL_DM.equals(conversation.source)
-                && socialBridge.isAvailable()
-                && !conversation.remoteUserId.isEmpty()) {
+        if (Conversation.SOURCE_SOCIAL_DM.equals(conversation.source)) {
+            if (!socialBridge.isAvailable()) {
+                send.setEnabled(true);
+                Toast.makeText(this, socialBridge.getUnavailableReason(), Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (!socialBridge.isConnected()) {
+                send.setEnabled(true);
+                Toast.makeText(this, R.string.oauth_reconnecting, Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (conversation.remoteUserId.isEmpty()) {
+                send.setEnabled(true);
+                Toast.makeText(this, R.string.invalid_discord_recipient, Toast.LENGTH_LONG).show();
+                return;
+            }
             socialBridge.sendDirectMessage(conversation.remoteUserId, message);
             return;
         }
@@ -61,8 +95,26 @@ public final class ReplyActivity extends Activity implements DiscordSocialBridge
         }
     }
 
+    private void openDiscord() {
+        Intent intent = getPackageManager().getLaunchIntentForPackage("com.discord");
+        if (intent == null) {
+            intent = getPackageManager().getLaunchIntentForPackage("com.discord.beta");
+        }
+        if (intent == null) {
+            intent = getPackageManager().getLaunchIntentForPackage("com.discord.canary");
+        }
+        if (intent == null) {
+            Toast.makeText(this, R.string.discord_not_installed, Toast.LENGTH_LONG).show();
+            return;
+        }
+        startActivity(intent);
+    }
+
     @Override
     public void onStatus(String status) {
+        if ("ready".equalsIgnoreCase(status)) {
+            runOnUiThread(() -> send.setEnabled(true));
+        }
     }
 
     @Override
