@@ -2,6 +2,7 @@ package com.alastorkaneki.discordwidget;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.widget.LinearLayout;
 
@@ -25,7 +26,13 @@ public final class RainbowLinearLayout extends LinearLayout {
 
     private void initialize(Context context) {
         outline = new RainbowOutlineDrawable(context, 18f, 2f);
+        outline.setCallback(this);
         setWillNotDraw(false);
+    }
+
+    @Override
+    protected boolean verifyDrawable(Drawable drawable) {
+        return drawable == outline || super.verifyDrawable(drawable);
     }
 
     @Override
