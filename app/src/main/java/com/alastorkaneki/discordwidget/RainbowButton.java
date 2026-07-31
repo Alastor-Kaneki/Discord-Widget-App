@@ -2,6 +2,7 @@ package com.alastorkaneki.discordwidget;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 
 import androidx.appcompat.widget.AppCompatButton;
@@ -26,7 +27,13 @@ public final class RainbowButton extends AppCompatButton {
 
     private void initialize(Context context) {
         outline = new RainbowOutlineDrawable(context, 16f, 2.25f);
+        outline.setCallback(this);
         setStateListAnimator(null);
+    }
+
+    @Override
+    protected boolean verifyDrawable(Drawable drawable) {
+        return drawable == outline || super.verifyDrawable(drawable);
     }
 
     @Override
