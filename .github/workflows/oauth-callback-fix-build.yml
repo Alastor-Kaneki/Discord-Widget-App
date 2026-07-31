@@ -43,11 +43,11 @@ jobs:
           from pathlib import Path
           data = Path('merged-manifest.bin').read_bytes()
           scheme = 'discord-1532856977225551912'.encode('utf-16le')
-          activity = 'com.discord.socialsdk.AuthenticationActivity'.encode('utf-16le')
+          callback = 'com.alastorkaneki.discordwidget.DiscordOAuthCallbackActivity'.encode('utf-16le')
           if scheme not in data:
               raise SystemExit('OAuth redirect scheme missing from packaged manifest')
-          if activity not in data:
-              raise SystemExit('Discord AuthenticationActivity missing from packaged manifest')
+          if callback not in data:
+              raise SystemExit('App-owned OAuth callback activity missing from packaged manifest')
           PY
       - uses: actions/upload-artifact@v4
         with:
