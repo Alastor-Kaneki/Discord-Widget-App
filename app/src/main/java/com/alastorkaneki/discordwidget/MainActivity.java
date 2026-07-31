@@ -1,9 +1,11 @@
 package com.alastorkaneki.discordwidget;
 
+import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -12,6 +14,7 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 public final class MainActivity extends AppCompatActivity implements DiscordSocialBridge.Listener {
@@ -49,8 +52,11 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
         });
 
         socialBridge = new DiscordSocialBridge(this, this);
-        connectButton.setEnabled(socialBridge.isAvailable());
-        connectButton.setOnClickListener(view -> socialBridge.connect());
+        connectButton.setEnabled(true);
+        connectButton.setText(socialBridge.isAvailable()
+                ? R.string.connect_discord
+                : R.string.configure_discord_oauth);
+        connectButton.setOnClickListener(view -> connectDiscord());
         notificationButton.setOnClickListener(view -> openNotificationAccess());
         refreshButton.setOnClickListener(view -> {
             refreshList();
@@ -61,8 +67,8 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
         });
 
         status.setText(socialBridge.isAvailable()
-                ? R.string.social_ready_to_connect
-                : R.string.notification_mode);
+                ? getString(R.string.social_ready_to_connect)
+                : getString(R.string.oauth_unavailable_status, socialBridge.getUnavailableReason()));
         refreshList();
     }
 
@@ -123,6 +129,28 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
         socialBridge.refreshDirectMessages();
     }
 
+    private void connectDiscord() {
+        if (socialBridge.isAvailable()) {
+            status.setText(R.string.connecting_discord);
+            socialBridge.connect();
+            return;
+        }
+        showOAuthSetupDialog();
+    }
+
+    private void showOAuthSetupDialog() {
+        String message = socialBridge.getUnavailableReason()
+                + "\n\n"
+                + getString(R.string.oauth_setup_requirements, socialBridge.getRedirectUri());
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.oauth_setup_title)
+                .setMessage(message)
+                .setPositiveButton(R.string.open_developer_portal, (dialog, which) -> openDeveloperPortal())
+                .setNeutralButton(R.string.enable_notification_access, (dialog, which) -> openNotificationAccess())
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
     private void refreshList() {
         adapter.replace(ConversationStore.getAll(this));
     }
@@ -131,5 +159,16 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
         Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
+    }
+
+    private void openDeveloperPortal() {
+        try {
+            startActivity(new Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://discord.com/developers/applications")
+            ));
+        } catch (ActivityNotFoundException error) {
+            Toast.makeText(this, R.string.no_browser_available, Toast.LENGTH_LONG).show();
+        }
     }
 }
