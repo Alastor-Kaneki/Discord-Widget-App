@@ -1,0 +1,34 @@
+name: Patch native token callback
+
+on:
+  push:
+    branches:
+      - agent/oauth-session-messaging
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/oauth-session-messaging
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('app/src/main/cpp/social_bridge.cpp')
+          content = path.read_text()
+          old = 'client->SetTokenExpirationCallback([](discordpp::AuthorizationTokenType) {'
+          new = 'client->SetTokenExpirationCallback([] {'
+          if old not in content:
+              raise SystemExit('Expected callback signature was not found')
+          path.write_text(content.replace(old, new, 1))
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/cpp/social_bridge.cpp
+          git commit -m "Fix Discord token expiration callback signature"
+          git push origin HEAD:agent/oauth-session-messaging
