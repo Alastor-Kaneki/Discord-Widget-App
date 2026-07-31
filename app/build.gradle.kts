@@ -3,8 +3,8 @@ plugins {
 }
 
 val discordApplicationId = providers.gradleProperty("DISCORD_APPLICATION_ID").orElse("0").get()
-val socialSdkRoot = file("discord_social_sdk")
-val socialSdkPresent = file("discord_social_sdk/include/discordpp.h").exists()
+val socialSdkAar = file("discord_social_sdk/discord_partner_sdk.aar")
+val socialSdkPresent = socialSdkAar.exists()
 
 configurations.configureEach {
     resolutionStrategy {
@@ -22,8 +22,8 @@ android {
         applicationId = "com.alastorkaneki.discordwidget"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         manifestPlaceholders["discordApplicationId"] = discordApplicationId
         buildConfigField("String", "DISCORD_APPLICATION_ID", "\"$discordApplicationId\"")
         buildConfigField("boolean", "SOCIAL_SDK_PRESENT", socialSdkPresent.toString())
@@ -31,6 +31,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        prefab = socialSdkPresent
     }
 
     compileOptions {
@@ -48,7 +49,6 @@ android {
         defaultConfig {
             externalNativeBuild {
                 cmake {
-                    arguments += "-DDISCORD_SDK_ROOT=${socialSdkRoot.absolutePath}"
                     cppFlags += "-std=c++17"
                 }
             }
@@ -56,11 +56,13 @@ android {
                 abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
             }
         }
-        sourceSets.getByName("main").jniLibs.srcDir("discord_social_sdk/lib")
     }
 }
 
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.browser:browser:1.8.0")
+    if (socialSdkPresent) {
+        implementation(files(socialSdkAar))
+    }
 }

@@ -12,30 +12,68 @@ public final class DiscordSocialBridge {
 
     private final Listener listener;
     private final boolean available;
+    private final boolean applicationIdConfigured;
+    private final boolean sdkBundled;
+    private final String unavailableReason;
 
     public DiscordSocialBridge(Activity activity, Listener listener) {
         this.listener = listener;
+        applicationIdConfigured = BuildConfig.DISCORD_APPLICATION_ID != null
+                && !BuildConfig.DISCORD_APPLICATION_ID.trim().isEmpty()
+                && !"0".equals(BuildConfig.DISCORD_APPLICATION_ID);
+        sdkBundled = BuildConfig.SOCIAL_SDK_PRESENT;
+
         boolean loaded = false;
-        if (BuildConfig.SOCIAL_SDK_PRESENT && !"0".equals(BuildConfig.DISCORD_APPLICATION_ID)) {
+        String reason = "";
+        if (!applicationIdConfigured) {
+            reason = activity.getString(R.string.oauth_missing_application_id);
+        } else if (!sdkBundled) {
+            reason = activity.getString(R.string.oauth_missing_social_sdk);
+        } else {
             try {
                 System.loadLibrary("discord_widget_bridge");
                 Class<?> init = Class.forName("com.discord.socialsdk.DiscordSocialSdkInit");
                 init.getMethod("setEngineActivity", Activity.class).invoke(null, activity);
                 loaded = nativeInitialize(Long.parseUnsignedLong(BuildConfig.DISCORD_APPLICATION_ID), this);
+                if (!loaded) {
+                    reason = activity.getString(R.string.oauth_native_initialization_failed);
+                }
             } catch (Throwable error) {
-                listener.onError(error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage());
+                String detail = error.getMessage() == null
+                        ? error.getClass().getSimpleName()
+                        : error.getMessage();
+                reason = activity.getString(R.string.oauth_initialization_error, detail);
             }
         }
         available = loaded;
+        unavailableReason = available ? "" : reason;
     }
 
     public boolean isAvailable() {
         return available;
     }
 
+    public boolean isApplicationIdConfigured() {
+        return applicationIdConfigured;
+    }
+
+    public boolean isSdkBundled() {
+        return sdkBundled;
+    }
+
+    public String getUnavailableReason() {
+        return unavailableReason;
+    }
+
+    public String getRedirectUri() {
+        return applicationIdConfigured
+                ? "discord-" + BuildConfig.DISCORD_APPLICATION_ID + ":/authorize/callback"
+                : "discord-APPLICATION_ID:/authorize/callback";
+    }
+
     public void connect() {
         if (!available) {
-            listener.onError("Discord Social SDK is not configured");
+            listener.onError(unavailableReason);
             return;
         }
         nativeConnect();
@@ -43,7 +81,7 @@ public final class DiscordSocialBridge {
 
     public void refreshDirectMessages() {
         if (!available) {
-            listener.onError("Discord Social SDK is not configured");
+            listener.onError(unavailableReason);
             return;
         }
         nativeRefreshDirectMessages();
@@ -51,7 +89,7 @@ public final class DiscordSocialBridge {
 
     public void sendDirectMessage(String userId, String message) {
         if (!available) {
-            listener.onError("Discord Social SDK is not configured");
+            listener.onError(unavailableReason);
             return;
         }
         nativeSendDirectMessage(userId, message);

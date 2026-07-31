@@ -4,41 +4,36 @@ Discord's normal OAuth2 REST scopes do not expose all user messages. This projec
 
 ## Discord Developer Portal
 
-1. Create a Discord developer team.
-2. Create an application owned by that team.
-3. Enable Discord Social SDK for the application.
-4. Enable the communication scopes used by `Client::GetDefaultCommunicationScopes`.
-5. Add the mobile redirect URI:
+1. Create a Discord application.
+2. Complete the Getting Started flow under the Social SDK section.
+3. Enable Public Client on the OAuth2 page for local PKCE token exchange.
+4. Add the mobile redirect URI:
 
    `discord-APPLICATION_ID:/authorize/callback`
 
-6. Set the application as a public client for local PKCE token exchange, or replace the token exchange with a confidential backend.
-7. Download the latest standalone C++ Social SDK for Android.
+5. Download Discord Social SDK 1.5 or newer for Android from the application's Social SDK page.
 
 ## Project configuration
 
-Set the public application ID in `gradle.properties`:
+Set the application ID in the root `gradle.properties` file:
 
 ```properties
 DISCORD_APPLICATION_ID=123456789012345678
 ```
 
-Extract the SDK under:
+Place the Android AAR at:
 
 ```text
-app/discord_social_sdk/
-├── include/
-│   └── discordpp.h
-└── lib/
-    ├── arm64-v8a/
-    │   └── libdiscord_partner_sdk.so
-    ├── armeabi-v7a/
-    │   └── libdiscord_partner_sdk.so
-    └── x86_64/
-        └── libdiscord_partner_sdk.so
+app/discord_social_sdk/discord_partner_sdk.aar
 ```
 
-The SDK directory is ignored by Git because Discord distributes it through the Developer Portal. When `discordpp.h` is present, Gradle automatically enables the native bridge.
+The SDK directory is ignored by Git because Discord distributes the package through the Developer Portal. When `discord_partner_sdk.aar` is present, Gradle automatically enables Prefab, compiles the JNI bridge, packages the SDK, and registers the Discord authorization callback scheme.
+
+The redirect URI in the Discord Developer Portal must exactly match the application ID used during the build:
+
+```text
+discord-123456789012345678:/authorize/callback
+```
 
 ## Supported OAuth behavior
 
@@ -53,4 +48,4 @@ Discord currently limits retrieved history to 200 messages and 72 hours. Both us
 
 ## Server channels
 
-Server channels are not exposed as unrestricted user-account message access. Discord's supported route is Linked Channels. A link requires a Social SDK lobby and the authorizing user must have Manage Channels, View Channel, and Send Messages. Linked Channels are separate from the notification-backed widget path and are not enabled in the first build.
+Server channels are not exposed as unrestricted user-account message access. Discord's supported route is Linked Channels. A link requires a Social SDK lobby and the authorizing user must have Manage Channels, View Channel, and Send Messages. Linked Channels are separate from the notification-backed widget path and are not enabled in this build.
