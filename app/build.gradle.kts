@@ -6,6 +6,14 @@ val discordApplicationId = providers.gradleProperty("DISCORD_APPLICATION_ID").or
 val socialSdkRoot = file("discord_social_sdk")
 val socialSdkPresent = file("discord_social_sdk/include/discordpp.h").exists()
 
+configurations.configureEach {
+    resolutionStrategy {
+        force("org.jetbrains.kotlin:kotlin-stdlib:1.8.22")
+        force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22")
+        force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22")
+    }
+}
+
 android {
     namespace = "com.alastorkaneki.discordwidget"
     compileSdk = 36

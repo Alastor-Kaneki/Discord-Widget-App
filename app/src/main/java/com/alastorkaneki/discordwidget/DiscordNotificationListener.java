@@ -15,6 +15,17 @@ public final class DiscordNotificationListener extends NotificationListenerServi
     private static final Map<String, StatusBarNotification> ACTIVE = new ConcurrentHashMap<>();
 
     @Override
+    public void onListenerConnected() {
+        StatusBarNotification[] notifications = getActiveNotifications();
+        if (notifications == null) {
+            return;
+        }
+        for (StatusBarNotification notification : notifications) {
+            onNotificationPosted(notification);
+        }
+    }
+
+    @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         if (!isDiscordPackage(sbn.getPackageName())) {
             return;
@@ -31,7 +42,7 @@ public final class DiscordNotificationListener extends NotificationListenerServi
         }
         String subtitle = text(extras.getCharSequence(Notification.EXTRA_SUB_TEXT));
         String shortcutId = notification.getShortcutId();
-        String key = shortcutId == null || shortcutId.isBlank()
+        String key = shortcutId == null || shortcutId.trim().isEmpty()
                 ? sbn.getPackageName() + ":" + title + ":" + subtitle
                 : sbn.getPackageName() + ":" + shortcutId;
         Conversation conversation = new Conversation(

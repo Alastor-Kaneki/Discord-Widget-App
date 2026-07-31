@@ -120,6 +120,20 @@ Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeInitialize(
         }
         callOneString("dispatchStatus", discordpp::Client::StatusToString(status));
     });
+    client->SetMessageCreatedCallback([](uint64_t messageId) {
+        if (!client) {
+            return;
+        }
+        auto message = client->GetMessageHandle(messageId);
+        if (!message.has_value()) {
+            return;
+        }
+        uint64_t userId = message->RecipientId();
+        if (userId == 0) {
+            return;
+        }
+        callConversation(std::to_string(userId), message->Content(), message->Id());
+    });
     callbacksRunning.store(true);
     callbacksThread = std::thread([] {
         while (callbacksRunning.load()) {
