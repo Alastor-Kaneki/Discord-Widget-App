@@ -14,8 +14,18 @@ static jobject bridgeObject = nullptr;
 static std::shared_ptr<discordpp::Client> client;
 static uint64_t applicationId = 0;
 static std::atomic<bool> callbacksRunning{false};
+static std::atomic<bool> ready{false};
 static std::thread callbacksThread;
 static std::mutex bridgeMutex;
+static std::mutex tokenMutex;
+static std::string currentRefreshToken;
+static int64_t currentExpiresAtMillis = 0;
+
+static int64_t nowMillis() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+}
 
 static JNIEnv* envForThread(bool& attached) {
     attached = false;
@@ -81,6 +91,39 @@ static void callMessageSent(const std::string& userId, uint64_t messageId) {
     }
 }
 
+static void callTokens(
+    const std::string& accessToken,
+    const std::string& refreshToken,
+    int64_t expiresAtMillis
+) {
+    bool attached;
+    JNIEnv* env = envForThread(attached);
+    if (env == nullptr || bridgeObject == nullptr) {
+        return;
+    }
+    jclass type = env->GetObjectClass(bridgeObject);
+    jmethodID method = env->GetMethodID(
+        type,
+        "dispatchTokens",
+        "(Ljava/lang/String;Ljava/lang/String;J)V"
+    );
+    jstring access = env->NewStringUTF(accessToken.c_str());
+    jstring refresh = env->NewStringUTF(refreshToken.c_str());
+    env->CallVoidMethod(
+        bridgeObject,
+        method,
+        access,
+        refresh,
+        static_cast<jlong>(expiresAtMillis)
+    );
+    env->DeleteLocalRef(access);
+    env->DeleteLocalRef(refresh);
+    env->DeleteLocalRef(type);
+    if (attached) {
+        javaVm->DetachCurrentThread();
+    }
+}
+
 static std::string toString(JNIEnv* env, jstring value) {
     const char* raw = env->GetStringUTFChars(value, nullptr);
     std::string result(raw == nullptr ? "" : raw);
@@ -88,6 +131,73 @@ static std::string toString(JNIEnv* env, jstring value) {
         env->ReleaseStringUTFChars(value, raw);
     }
     return result;
+}
+
+static void connectWithAccessToken(const std::string& accessToken) {
+    if (!client || accessToken.empty()) {
+        callOneString("dispatchError", "Discord access token is unavailable");
+        return;
+    }
+    client->UpdateToken(
+        discordpp::AuthorizationTokenType::Bearer,
+        accessToken,
+        [](discordpp::ClientResult result) {
+            if (!result.Successful()) {
+                callOneString("dispatchError", "Discord token update failed");
+                return;
+            }
+            client->Connect();
+        }
+    );
+}
+
+static void storeTokensAndConnect(
+    const std::string& accessToken,
+    const std::string& refreshToken,
+    int32_t expiresIn
+) {
+    int64_t expiresAtMillis = nowMillis() + static_cast<int64_t>(expiresIn) * 1000;
+    {
+        std::lock_guard<std::mutex> lock(tokenMutex);
+        currentRefreshToken = refreshToken;
+        currentExpiresAtMillis = expiresAtMillis;
+    }
+    callTokens(accessToken, refreshToken, expiresAtMillis);
+    connectWithAccessToken(accessToken);
+}
+
+static void refreshCurrentToken() {
+    if (!client) {
+        callOneString("dispatchError", "Social SDK client is not initialized");
+        return;
+    }
+    std::string refreshToken;
+    {
+        std::lock_guard<std::mutex> lock(tokenMutex);
+        refreshToken = currentRefreshToken;
+    }
+    if (refreshToken.empty()) {
+        callOneString("dispatchError", "Discord refresh token is unavailable");
+        return;
+    }
+    client->RefreshToken(
+        applicationId,
+        refreshToken,
+        [](
+            discordpp::ClientResult result,
+            std::string accessToken,
+            std::string refreshTokenValue,
+            discordpp::AuthorizationTokenType,
+            int32_t expiresIn,
+            std::string
+        ) {
+            if (!result.Successful()) {
+                callOneString("dispatchError", "Discord token refresh failed");
+                return;
+            }
+            storeTokensAndConnect(accessToken, refreshTokenValue, expiresIn);
+        }
+    );
 }
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
@@ -104,21 +214,27 @@ Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeInitialize(
 ) {
     std::lock_guard<std::mutex> lock(bridgeMutex);
     applicationId = static_cast<uint64_t>(appId);
-    if (bridgeObject != nullptr) {
-        env->DeleteGlobalRef(bridgeObject);
+    if (bridgeObject == nullptr) {
+        bridgeObject = env->NewGlobalRef(bridge);
     }
-    bridgeObject = env->NewGlobalRef(bridge);
+    if (client) {
+        return JNI_TRUE;
+    }
     client = std::make_shared<discordpp::Client>();
     client->SetStatusChangedCallback([](
         discordpp::Client::Status status,
         discordpp::Client::Error error,
         int32_t errorDetail
     ) {
+        ready.store(status == discordpp::Client::Status::Ready);
         if (error != discordpp::Client::Error::None) {
             callOneString("dispatchError", "Discord Social SDK error " + std::to_string(errorDetail));
             return;
         }
         callOneString("dispatchStatus", discordpp::Client::StatusToString(status));
+    });
+    client->SetTokenExpirationCallback([](discordpp::AuthorizationTokenType) {
+        refreshCurrentToken();
     });
     client->SetMessageCreatedCallback([](uint64_t messageId) {
         if (!client) {
@@ -179,26 +295,16 @@ Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeConnect(
                 [](
                     discordpp::ClientResult tokenResult,
                     std::string accessToken,
-                    std::string,
+                    std::string refreshToken,
                     discordpp::AuthorizationTokenType,
-                    int32_t,
+                    int32_t expiresIn,
                     std::string
                 ) {
                     if (!tokenResult.Successful()) {
                         callOneString("dispatchError", "Discord token exchange failed");
                         return;
                     }
-                    client->UpdateToken(
-                        discordpp::AuthorizationTokenType::Bearer,
-                        accessToken,
-                        [](discordpp::ClientResult updateResult) {
-                            if (!updateResult.Successful()) {
-                                callOneString("dispatchError", "Discord token update failed");
-                                return;
-                            }
-                            client->Connect();
-                        }
-                    );
+                    storeTokensAndConnect(accessToken, refreshToken, expiresIn);
                 }
             );
         }
@@ -206,12 +312,41 @@ Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeConnect(
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeRestoreSession(
+    JNIEnv* env,
+    jclass,
+    jstring accessTokenValue,
+    jstring refreshTokenValue,
+    jlong expiresAtMillis
+) {
+    std::string accessToken = toString(env, accessTokenValue);
+    std::string refreshToken = toString(env, refreshTokenValue);
+    {
+        std::lock_guard<std::mutex> lock(tokenMutex);
+        currentRefreshToken = refreshToken;
+        currentExpiresAtMillis = static_cast<int64_t>(expiresAtMillis);
+    }
+    if (!accessToken.empty() && static_cast<int64_t>(expiresAtMillis) > nowMillis() + 60'000) {
+        connectWithAccessToken(accessToken);
+        return;
+    }
+    refreshCurrentToken();
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeIsReady(
+    JNIEnv*,
+    jclass
+) {
+    return ready.load() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeRefreshDirectMessages(
     JNIEnv*,
     jclass
 ) {
-    if (!client) {
-        callOneString("dispatchError", "Social SDK client is not initialized");
+    if (!client || !ready.load()) {
         return;
     }
     client->GetUserMessageSummaries([](
@@ -254,8 +389,8 @@ Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeSendDirectMessage
     jstring userIdValue,
     jstring messageValue
 ) {
-    if (!client) {
-        callOneString("dispatchError", "Social SDK client is not initialized");
+    if (!client || !ready.load()) {
+        callOneString("dispatchError", "Discord is reconnecting");
         return;
     }
     std::string userIdText = toString(env, userIdValue);
