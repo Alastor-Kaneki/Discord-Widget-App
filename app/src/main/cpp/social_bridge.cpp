@@ -233,7 +233,7 @@ Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeInitialize(
         }
         callOneString("dispatchStatus", discordpp::Client::StatusToString(status));
     });
-    client->SetTokenExpirationCallback([](discordpp::AuthorizationTokenType) {
+    client->SetTokenExpirationCallback([] {
         refreshCurrentToken();
     });
     client->SetMessageCreatedCallback([](uint64_t messageId) {
