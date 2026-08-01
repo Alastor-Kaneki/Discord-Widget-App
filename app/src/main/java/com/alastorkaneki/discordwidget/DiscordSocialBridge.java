@@ -11,6 +11,7 @@ public final class DiscordSocialBridge {
     public interface Listener {
         void onStatus(String status);
         void onConversation(String userId, String preview, long messageId);
+        void onMessageHistory(String userId, String messagesJson);
         void onError(String error);
         void onMessageSent(String userId, long messageId);
     }
@@ -169,6 +170,22 @@ public final class DiscordSocialBridge {
         nativeRefreshDirectMessages();
     }
 
+    public void fetchDirectMessageHistory(String userId, int limit) {
+        if (!available) {
+            dispatchError(unavailableReason);
+            return;
+        }
+        if (!nativeIsReady()) {
+            dispatchError(appContext.getString(R.string.oauth_reconnecting));
+            return;
+        }
+        if (userId == null || userId.isEmpty()) {
+            dispatchError(appContext.getString(R.string.invalid_discord_recipient));
+            return;
+        }
+        nativeFetchDirectMessageHistory(userId, Math.max(1, Math.min(200, limit)));
+    }
+
     public void sendDirectMessage(String userId, String message) {
         if (!available) {
             dispatchError(unavailableReason);
@@ -211,6 +228,12 @@ public final class DiscordSocialBridge {
         }
     }
 
+    private void dispatchMessageHistory(String userId, String messagesJson) {
+        for (Listener listener : listeners) {
+            listener.onMessageHistory(userId, messagesJson);
+        }
+    }
+
     private void dispatchError(String error) {
         for (Listener listener : listeners) {
             listener.onError(error);
@@ -250,5 +273,6 @@ public final class DiscordSocialBridge {
     );
     private static native boolean nativeIsReady();
     private static native void nativeRefreshDirectMessages();
+    private static native void nativeFetchDirectMessageHistory(String userId, int limit);
     private static native void nativeSendDirectMessage(String userId, String message);
 }
