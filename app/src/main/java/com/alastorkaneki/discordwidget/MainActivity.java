@@ -20,12 +20,17 @@ import androidx.appcompat.app.AppCompatActivity;
 
 public final class MainActivity extends AppCompatActivity implements DiscordSocialBridge.Listener {
     public static final String ACTION_CONVERSATIONS_CHANGED = "com.alastorkaneki.discordwidget.CONVERSATIONS_CHANGED";
+    public static final String EXTRA_OAUTH_CODE = "oauth_code";
+    public static final String EXTRA_OAUTH_VERIFIER = "oauth_verifier";
+    public static final String EXTRA_OAUTH_REDIRECT_URI = "oauth_redirect_uri";
+    public static final String EXTRA_OAUTH_ERROR = "oauth_error";
 
     private ConversationAdapter adapter;
     private TextView status;
     private Button connectButton;
     private Button notificationButton;
     private DiscordSocialBridge socialBridge;
+    private boolean oauthExchangeInProgress;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
@@ -57,9 +62,6 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
         socialBridge = DiscordSocialBridge.get(this);
         socialBridge.initialize(this);
         connectButton.setEnabled(true);
-        connectButton.setText(socialBridge.isConnected()
-                ? R.string.discord_connected
-                : R.string.connect_discord);
         connectButton.setOnClickListener(view -> connectDiscord());
         notificationButton.setOnClickListener(view -> openNotificationAccess());
         notificationButton.setVisibility(socialBridge.isAvailable() ? View.GONE : View.VISIBLE);
@@ -71,19 +73,15 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
             ConversationWidgetProvider.updateAll(this);
         });
 
-        if (!socialBridge.isAvailable()) {
-            status.setText(getString(
-                    R.string.oauth_unavailable_status,
-                    socialBridge.getUnavailableReason()
-            ));
-        } else if (socialBridge.isConnected()) {
-            status.setText(R.string.discord_connected_status);
-        } else if (socialBridge.hasStoredSession()) {
-            status.setText(R.string.oauth_restoring_session);
-        } else {
-            status.setText(R.string.social_ready_to_connect);
-        }
+        updateConnectionUi();
         refreshList();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        socialBridge.initialize(this);
     }
 
     @Override
@@ -100,6 +98,17 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        socialBridge.initialize(this);
+        handleOAuthIntent(getIntent());
+        updateConnectionUi();
+        if (socialBridge.isConnected()) {
+            socialBridge.refreshDirectMessages();
+        }
+    }
+
+    @Override
     protected void onStop() {
         socialBridge.removeListener(this);
         unregisterReceiver(receiver);
@@ -110,6 +119,7 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
     public void onStatus(String value) {
         runOnUiThread(() -> {
             if ("ready".equalsIgnoreCase(value)) {
+                oauthExchangeInProgress = false;
                 status.setText(R.string.discord_connected_status);
                 connectButton.setText(R.string.discord_connected);
                 notificationButton.setVisibility(View.GONE);
@@ -128,6 +138,7 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
     @Override
     public void onError(String error) {
         runOnUiThread(() -> {
+            oauthExchangeInProgress = false;
             status.setText(error);
             Toast.makeText(this, error, Toast.LENGTH_LONG).show();
         });
@@ -138,6 +149,60 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
         runOnUiThread(() -> Toast.makeText(this, R.string.message_sent, Toast.LENGTH_SHORT).show());
     }
 
+    private void handleOAuthIntent(Intent intent) {
+        if (intent == null) {
+            return;
+        }
+        String error = intent.getStringExtra(EXTRA_OAUTH_ERROR);
+        String code = intent.getStringExtra(EXTRA_OAUTH_CODE);
+        String verifier = intent.getStringExtra(EXTRA_OAUTH_VERIFIER);
+        String redirectUri = intent.getStringExtra(EXTRA_OAUTH_REDIRECT_URI);
+        intent.removeExtra(EXTRA_OAUTH_ERROR);
+        intent.removeExtra(EXTRA_OAUTH_CODE);
+        intent.removeExtra(EXTRA_OAUTH_VERIFIER);
+        intent.removeExtra(EXTRA_OAUTH_REDIRECT_URI);
+
+        if (error != null && !error.isEmpty()) {
+            oauthExchangeInProgress = false;
+            status.setText(error);
+            Toast.makeText(this, error, Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (code == null) {
+            return;
+        }
+        if (verifier == null || redirectUri == null) {
+            String message = getString(R.string.oauth_callback_invalid);
+            status.setText(message);
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            return;
+        }
+        oauthExchangeInProgress = true;
+        status.setText(R.string.oauth_exchanging_code);
+        socialBridge.exchangeAuthorizationCode(code, verifier, redirectUri);
+    }
+
+    private void updateConnectionUi() {
+        connectButton.setText(socialBridge.isConnected()
+                ? R.string.discord_connected
+                : R.string.connect_discord);
+        notificationButton.setVisibility(socialBridge.isAvailable() ? View.GONE : View.VISIBLE);
+        if (oauthExchangeInProgress) {
+            status.setText(R.string.oauth_exchanging_code);
+        } else if (!socialBridge.isAvailable()) {
+            status.setText(getString(
+                    R.string.oauth_unavailable_status,
+                    socialBridge.getUnavailableReason()
+            ));
+        } else if (socialBridge.isConnected()) {
+            status.setText(R.string.discord_connected_status);
+        } else if (socialBridge.hasStoredSession()) {
+            status.setText(R.string.oauth_restoring_session);
+        } else {
+            status.setText(R.string.social_ready_to_connect);
+        }
+    }
+
     private void connectDiscord() {
         if (socialBridge.isAvailable()) {
             if (socialBridge.isConnected()) {
@@ -145,7 +210,7 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
                 return;
             }
             status.setText(R.string.connecting_discord);
-            socialBridge.connect();
+            socialBridge.connect(this);
             return;
         }
         showOAuthSetupDialog();

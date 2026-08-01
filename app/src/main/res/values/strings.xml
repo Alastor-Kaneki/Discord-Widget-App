@@ -7,6 +7,10 @@
     <string name="discord_connected_status">Connected through Discord Social SDK. Linked DMs send and receive without Notification Access.</string>
     <string name="configure_discord_oauth">Configure Discord OAuth</string>
     <string name="connecting_discord">Opening Discord authorization…</string>
+    <string name="oauth_exchanging_code">Discord authorization returned. Connecting the linked account…</string>
+    <string name="oauth_callback_missing">Discord returned without an OAuth callback.</string>
+    <string name="oauth_callback_invalid">Discord returned an invalid or expired OAuth callback. Start the connection again.</string>
+    <string name="oauth_no_browser">No browser is available to open Discord authorization.</string>
     <string name="oauth_restoring_session">Restoring the linked Discord session…</string>
     <string name="oauth_reconnecting">Discord is reconnecting. Try again when the linked session is ready.</string>
     <string name="enable_notification_access">Optional notification fallback</string>
