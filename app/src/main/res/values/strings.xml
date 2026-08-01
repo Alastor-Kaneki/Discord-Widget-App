@@ -17,7 +17,7 @@
     <string name="optional_notification_fallback">Use notification fallback</string>
     <string name="refresh">Refresh conversations and widgets</string>
     <string name="conversations">Conversations</string>
-    <string name="conversation_hint">Tap a conversation to reply. OAuth DMs use the linked Discord account directly.</string>
+    <string name="conversation_hint">Tap a conversation to open up to 200 recent messages from the last 72 hours.</string>
     <string name="social_ready_to_connect">OAuth messaging is available. Connect Discord to load and send supported DMs without Notification Access.</string>
     <string name="notification_mode">Notification fallback is active. Add the Discord Social SDK package to enable linked-account DMs.</string>
     <string name="oauth_unavailable_status">%1$s Tap Configure Discord OAuth for the exact setup requirements.</string>
@@ -38,7 +38,7 @@
     <string name="invalid_discord_recipient">This OAuth DM does not contain a valid Discord recipient.</string>
     <string name="discord_not_installed">Discord is not installed.</string>
     <string name="select_conversation">Select a conversation</string>
-    <string name="no_conversations">No conversations yet. Connect Discord, then receive or refresh supported DMs.</string>
+    <string name="no_conversations">No supported conversations were returned. Discord only exposes Social SDK DMs involving users who have used this application.</string>
     <string name="widget_not_configured">Choose a Discord conversation</string>
     <string name="widget_configure_hint">Remove and add this widget again to configure it.</string>
     <string name="type_message">Type a message</string>
@@ -49,4 +49,11 @@
     <string name="messaging_channel_description">Keeps the linked Social SDK session active for DM and widget updates.</string>
     <string name="messaging_service_title">Discord messaging connected</string>
     <string name="messaging_service_text">Receiving supported linked-account DMs for the widget.</string>
+    <string name="loading_message_history">Fetching recent Discord messages…</string>
+    <string name="refresh_message_history">Refresh message history</string>
+    <string name="no_message_history">No retrievable messages. Discord limits Social SDK history to 200 messages, 72 hours, and conversations where both users have used this application.</string>
+    <string name="message_history_parse_failed">The returned Discord message history could not be displayed.</string>
+    <string name="notification_history_unavailable">Notification fallback does not expose full Discord history.</string>
+    <string name="non_text_message">[Non-text message or attachment]</string>
+    <string name="you">You</string>
 </resources>
