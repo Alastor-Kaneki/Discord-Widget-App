@@ -13,6 +13,7 @@ public final class WidgetConfigActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        ImmersiveMode.apply(this);
         setResult(RESULT_CANCELED);
         setContentView(R.layout.activity_widget_config);
 
@@ -40,5 +41,19 @@ public final class WidgetConfigActivity extends Activity {
             setResult(RESULT_OK, result);
             finish();
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        ImmersiveMode.apply(this);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            ImmersiveMode.apply(this);
+        }
     }
 }
