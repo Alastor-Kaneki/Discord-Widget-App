@@ -5,6 +5,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -19,7 +20,6 @@ static std::thread callbacksThread;
 static std::mutex bridgeMutex;
 static std::mutex tokenMutex;
 static std::string currentRefreshToken;
-static int64_t currentExpiresAtMillis = 0;
 
 static int64_t nowMillis() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -38,6 +38,41 @@ static JNIEnv* envForThread(bool& attached) {
     return env;
 }
 
+static std::string toString(JNIEnv* env, jstring value) {
+    if (value == nullptr) {
+        return "";
+    }
+    const char* raw = env->GetStringUTFChars(value, nullptr);
+    std::string result(raw == nullptr ? "" : raw);
+    if (raw != nullptr) {
+        env->ReleaseStringUTFChars(value, raw);
+    }
+    return result;
+}
+
+static std::string jsonEscape(const std::string& value) {
+    std::ostringstream output;
+    for (unsigned char character : value) {
+        switch (character) {
+            case '\"': output << "\\\""; break;
+            case '\\': output << "\\\\"; break;
+            case '\b': output << "\\b"; break;
+            case '\f': output << "\\f"; break;
+            case '\n': output << "\\n"; break;
+            case '\r': output << "\\r"; break;
+            case '\t': output << "\\t"; break;
+            default:
+                if (character < 0x20) {
+                    const char hex[] = "0123456789abcdef";
+                    output << "\\u00" << hex[(character >> 4) & 0x0f] << hex[character & 0x0f];
+                } else {
+                    output << static_cast<char>(character);
+                }
+        }
+    }
+    return output.str();
+}
+
 static void callOneString(const char* methodName, const std::string& value) {
     bool attached;
     JNIEnv* env = envForThread(attached);
@@ -49,6 +84,33 @@ static void callOneString(const char* methodName, const std::string& value) {
     jstring text = env->NewStringUTF(value.c_str());
     env->CallVoidMethod(bridgeObject, method, text);
     env->DeleteLocalRef(text);
+    env->DeleteLocalRef(type);
+    if (attached) {
+        javaVm->DetachCurrentThread();
+    }
+}
+
+static void callTwoStrings(
+    const char* methodName,
+    const std::string& first,
+    const std::string& second
+) {
+    bool attached;
+    JNIEnv* env = envForThread(attached);
+    if (env == nullptr || bridgeObject == nullptr) {
+        return;
+    }
+    jclass type = env->GetObjectClass(bridgeObject);
+    jmethodID method = env->GetMethodID(
+        type,
+        methodName,
+        "(Ljava/lang/String;Ljava/lang/String;)V"
+    );
+    jstring firstValue = env->NewStringUTF(first.c_str());
+    jstring secondValue = env->NewStringUTF(second.c_str());
+    env->CallVoidMethod(bridgeObject, method, firstValue, secondValue);
+    env->DeleteLocalRef(firstValue);
+    env->DeleteLocalRef(secondValue);
     env->DeleteLocalRef(type);
     if (attached) {
         javaVm->DetachCurrentThread();
@@ -124,15 +186,6 @@ static void callTokens(
     }
 }
 
-static std::string toString(JNIEnv* env, jstring value) {
-    const char* raw = env->GetStringUTFChars(value, nullptr);
-    std::string result(raw == nullptr ? "" : raw);
-    if (raw != nullptr) {
-        env->ReleaseStringUTFChars(value, raw);
-    }
-    return result;
-}
-
 static void connectWithAccessToken(const std::string& accessToken) {
     if (!client || accessToken.empty()) {
         callOneString("dispatchError", "Discord access token is unavailable");
@@ -160,7 +213,6 @@ static void storeTokensAndConnect(
     {
         std::lock_guard<std::mutex> lock(tokenMutex);
         currentRefreshToken = refreshToken;
-        currentExpiresAtMillis = expiresAtMillis;
     }
     callTokens(accessToken, refreshToken, expiresAtMillis);
     connectWithAccessToken(accessToken);
@@ -198,6 +250,38 @@ static void refreshCurrentToken() {
             storeTokensAndConnect(accessToken, refreshTokenValue, expiresIn);
         }
     );
+}
+
+static void dispatchHistory(
+    uint64_t userId,
+    const std::vector<discordpp::MessageHandle>& messages
+) {
+    std::ostringstream json;
+    json << '[';
+    bool first = true;
+    for (auto iterator = messages.rbegin(); iterator != messages.rend(); ++iterator) {
+        const auto& message = *iterator;
+        if (!first) {
+            json << ',';
+        }
+        first = false;
+        std::string authorName;
+        auto author = message.Author();
+        if (author.has_value()) {
+            authorName = author->DisplayName();
+        }
+        bool outgoing = message.AuthorId() != userId;
+        json << '{'
+             << "\"id\":\"" << message.Id() << "\","
+             << "\"authorId\":\"" << message.AuthorId() << "\","
+             << "\"authorName\":\"" << jsonEscape(authorName) << "\","
+             << "\"content\":\"" << jsonEscape(message.Content()) << "\","
+             << "\"timestamp\":" << message.SentTimestamp() << ','
+             << "\"outgoing\":" << (outgoing ? "true" : "false")
+             << '}';
+    }
+    json << ']';
+    callTwoStrings("dispatchMessageHistory", std::to_string(userId), json.str());
 }
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
@@ -262,51 +346,42 @@ Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeInitialize(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeConnect(
-    JNIEnv*,
-    jclass
+Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeExchangeAuthorizationCode(
+    JNIEnv* env,
+    jclass,
+    jstring codeValue,
+    jstring verifierValue,
+    jstring redirectUriValue
 ) {
     if (!client) {
         callOneString("dispatchError", "Social SDK client is not initialized");
         return;
     }
-    auto verifier = client->CreateAuthorizationCodeVerifier();
-    discordpp::AuthorizationArgs args{};
-    args.SetClientId(applicationId);
-    args.SetScopes(discordpp::Client::GetDefaultCommunicationScopes());
-    args.SetCodeChallenge(verifier.Challenge());
-
-    client->Authorize(
-        args,
-        [verifier](
-            discordpp::ClientResult result,
-            std::string code,
-            std::string redirectUri
-        ) mutable {
-            if (!result.Successful()) {
-                callOneString("dispatchError", "Discord authorization failed");
+    std::string code = toString(env, codeValue);
+    std::string verifier = toString(env, verifierValue);
+    std::string redirectUri = toString(env, redirectUriValue);
+    if (code.empty() || verifier.empty() || redirectUri.empty()) {
+        callOneString("dispatchError", "Discord authorization callback is incomplete");
+        return;
+    }
+    client->GetToken(
+        applicationId,
+        code,
+        verifier,
+        redirectUri,
+        [](
+            discordpp::ClientResult tokenResult,
+            std::string accessToken,
+            std::string refreshToken,
+            discordpp::AuthorizationTokenType,
+            int32_t expiresIn,
+            std::string
+        ) {
+            if (!tokenResult.Successful()) {
+                callOneString("dispatchError", "Discord token exchange failed");
                 return;
             }
-            client->GetToken(
-                applicationId,
-                code,
-                verifier.Verifier(),
-                redirectUri,
-                [](
-                    discordpp::ClientResult tokenResult,
-                    std::string accessToken,
-                    std::string refreshToken,
-                    discordpp::AuthorizationTokenType,
-                    int32_t expiresIn,
-                    std::string
-                ) {
-                    if (!tokenResult.Successful()) {
-                        callOneString("dispatchError", "Discord token exchange failed");
-                        return;
-                    }
-                    storeTokensAndConnect(accessToken, refreshToken, expiresIn);
-                }
-            );
+            storeTokensAndConnect(accessToken, refreshToken, expiresIn);
         }
     );
 }
@@ -324,7 +399,6 @@ Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeRestoreSession(
     {
         std::lock_guard<std::mutex> lock(tokenMutex);
         currentRefreshToken = refreshToken;
-        currentExpiresAtMillis = static_cast<int64_t>(expiresAtMillis);
     }
     if (!accessToken.empty() && static_cast<int64_t>(expiresAtMillis) > nowMillis() + 60'000) {
         connectWithAccessToken(accessToken);
@@ -380,6 +454,51 @@ Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeRefreshDirectMess
             );
         }
     });
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_alastorkaneki_discordwidget_DiscordSocialBridge_nativeFetchDirectMessageHistory(
+    JNIEnv* env,
+    jclass,
+    jstring userIdValue,
+    jint limit
+) {
+    if (!client || !ready.load()) {
+        callOneString("dispatchError", "Discord is reconnecting");
+        return;
+    }
+    uint64_t userId = 0;
+    try {
+        userId = std::stoull(toString(env, userIdValue));
+    } catch (...) {
+        callOneString("dispatchError", "Invalid Discord user ID");
+        return;
+    }
+    int32_t safeLimit = static_cast<int32_t>(limit);
+    if (safeLimit < 1) {
+        safeLimit = 1;
+    }
+    if (safeLimit > 200) {
+        safeLimit = 200;
+    }
+    client->GetUserMessagesWithLimit(
+        userId,
+        safeLimit,
+        [userId](
+            const discordpp::ClientResult& result,
+            const std::vector<discordpp::MessageHandle>& messages
+        ) {
+            if (!result.Successful()) {
+                callTwoStrings("dispatchMessageHistory", std::to_string(userId), "[]");
+                callOneString(
+                    "dispatchError",
+                    "Discord could not return this DM history. Both people must have used this application, and only the last 72 hours are available."
+                );
+                return;
+            }
+            dispatchHistory(userId, messages);
+        }
+    );
 }
 
 extern "C" JNIEXPORT void JNICALL
