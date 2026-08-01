@@ -1,0 +1,6 @@
+<resources>
+    <plurals name="message_count">
+        <item quantity="one">%d recent message</item>
+        <item quantity="other">%d recent messages</item>
+    </plurals>
+</resources>
