@@ -42,6 +42,7 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        ImmersiveMode.apply(this);
         setContentView(R.layout.activity_main);
 
         status = findViewById(R.id.statusText);
@@ -100,11 +101,20 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
     @Override
     protected void onResume() {
         super.onResume();
+        ImmersiveMode.apply(this);
         socialBridge.initialize(this);
         handleOAuthIntent(getIntent());
         updateConnectionUi();
         if (socialBridge.isConnected()) {
             socialBridge.refreshDirectMessages();
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            ImmersiveMode.apply(this);
         }
     }
 
@@ -133,6 +143,10 @@ public final class MainActivity extends AppCompatActivity implements DiscordSoci
     @Override
     public void onConversation(String userId, String preview, long messageId) {
         runOnUiThread(this::refreshList);
+    }
+
+    @Override
+    public void onMessageHistory(String userId, String messagesJson) {
     }
 
     @Override
