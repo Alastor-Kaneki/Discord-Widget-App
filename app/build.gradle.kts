@@ -5,6 +5,16 @@ plugins {
 val discordApplicationId = providers.gradleProperty("DISCORD_APPLICATION_ID").orElse("0").get()
 val socialSdkAar = file("discord_social_sdk/discord_partner_sdk.aar")
 val socialSdkPresent = socialSdkAar.exists()
+val signingStorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
+val signingStorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
+val signingKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
+val signingKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+val stableSigningConfigured = listOf(
+    signingStorePath,
+    signingStorePassword,
+    signingKeyAlias,
+    signingKeyPassword
+).all { !it.isNullOrBlank() }
 
 configurations.configureEach {
     resolutionStrategy {
@@ -22,11 +32,39 @@ android {
         applicationId = "com.alastorkaneki.discordwidget"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.3.1"
+        versionCode = 6
+        versionName = "0.4.0"
         manifestPlaceholders["discordApplicationId"] = discordApplicationId
         buildConfigField("String", "DISCORD_APPLICATION_ID", "\"$discordApplicationId\"")
         buildConfigField("boolean", "SOCIAL_SDK_PRESENT", socialSdkPresent.toString())
+    }
+
+    signingConfigs {
+        if (stableSigningConfigured) {
+            create("stable") {
+                storeFile = file(signingStorePath!!)
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (stableSigningConfigured) {
+                signingConfig = signingConfigs.getByName("stable")
+            }
+        }
+        getByName("release") {
+            isMinifyEnabled = false
+            if (stableSigningConfigured) {
+                signingConfig = signingConfigs.getByName("stable")
+            }
+        }
     }
 
     buildFeatures {
