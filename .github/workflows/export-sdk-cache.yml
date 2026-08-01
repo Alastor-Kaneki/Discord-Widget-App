@@ -1,0 +1,30 @@
+name: Export Discord SDK Cache
+
+on:
+  push:
+    branches:
+      - agent/fix-oauth-return
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: sdk-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: sdk-cache/discord_partner_sdk.aar
+          key: discord-social-sdk-1.10.18247
+
+      - run: test -f sdk-cache/discord_partner_sdk.aar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Discord-Social-SDK-1.10.18247-export
+          path: sdk-cache/discord_partner_sdk.aar
+          if-no-files-found: error
+          retention-days: 1
