@@ -106,7 +106,7 @@ class MainActivity : Activity() {
                                 list.removeAllViews()
                                 status.text = "Found " + found.size + " asset URLs"
                                 found.forEach { (name, asset) ->
-                                    list.addView(Button(this).apply {
+                                    list.addView(Button(this@MainActivity).apply {
                                         text = name
                                         setOnClickListener { download(name, asset) }
                                     })
