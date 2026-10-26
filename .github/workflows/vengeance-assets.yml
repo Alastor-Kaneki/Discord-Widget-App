@@ -1,0 +1,51 @@
+name: Download Vengeance Collectibles
+on:
+  workflow_dispatch:
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download original Discord CDN assets
+        shell: bash
+        run: |
+          mkdir -p Vengeance/nameplate Vengeance/effect
+          python3 - <<'PY'
+          import urllib.request, pathlib, json
+          assets = {
+            "nameplate/static": "7363b0cd5e88ab7a6070fb705c8d73fac4026c5dafb038a9933537b54c752f99",
+            "nameplate/animated": "6b0b0116147189422152a9251e916e58382667b4c89517782ec7850e93b0ac73",
+            "nameplate/video": "5d72aea8c9996aa15bdbeff86b66168cea4082560b4d6e1a3df1a0492c4050de",
+            "effect/thumbnail": "cf54d92838428a1fd8e1542f05848eff1245b05871a085c5ce0071266fce4be0",
+            "effect/reduced_motion": "f4a80161ba60c2f925892f28850f59cd9c1fed480878ac0858049e96b477b079",
+            "effect/layer_0": "81ec57c2e6290a8828ceddd3c2dba70297886a21cf6b4b888feab0f06ad9312e",
+            "effect/layer_1": "d83d68958f16585c0f68eefd0b56dd8adef49b7aad3e4211f740341c15b558a7"
+          }
+          extensions = {"image/png":".png","image/webp":".webp","image/gif":".gif","video/mp4":".mp4","video/webm":".webm","image/avif":".avif","application/json":".json"}
+          results={}
+          for name, digest in assets.items():
+            url="https://cdn.discordapp.com/assets/content/"+digest
+            try:
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+              with urllib.request.urlopen(req,timeout=35) as response:
+                data=response.read()
+                mime=response.headers.get("Content-Type","").split(";")[0].lower()
+              ext=extensions.get(mime,".bin")
+              p=pathlib.Path("Vengeance")/(name+ext)
+              p.parent.mkdir(parents=True,exist_ok=True)
+              p.write_bytes(data)
+              results[name]={"status":"ok","mime":mime,"bytes":len(data),"filename":str(p)}
+              print("OK",name,len(data),mime)
+            except Exception as exc:
+              results[name]={"status":"failed","error":str(exc),"url":url}
+              print("FAILED",name,str(exc))
+          pathlib.Path("Vengeance/manifest.json").write_text(json.dumps(results,indent=2))
+          PY
+          cd Vengeance && zip -r ../Vengeance_Collectibles.zip .
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vengeance-Collectibles
+          path: Vengeance_Collectibles.zip
+          retention-days: 7
