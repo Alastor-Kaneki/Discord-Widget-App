@@ -7,6 +7,8 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Install FFmpeg and ffprobe
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Download original Discord CDN assets
         shell: bash
         run: |
