@@ -42,6 +42,39 @@ jobs:
               print("FAILED",name,str(exc))
           pathlib.Path("Vengeance/manifest.json").write_text(json.dumps(results,indent=2))
           PY
+          python3 - <<'PY'
+          import pathlib, subprocess, json
+          root=pathlib.Path("Vengeance")
+          results=json.loads((root/"manifest.json").read_text())
+          for name,entry in results.items():
+            if entry.get("status")!="ok": continue
+            p=pathlib.Path(entry["filename"])
+            # Probe the actual media, not only the HTTP Content-Type.
+            probe=subprocess.run(["ffprobe","-v","error","-show_entries","stream=codec_name,codec_type,width,height,nb_frames:format=duration,format_name","-of","json",str(p)],capture_output=True,text=True)
+            if probe.returncode: continue
+            info=json.loads(probe.stdout)
+            entry["probe"]=info
+            streams=[x for x in info.get("streams",[]) if x.get("codec_type")=="video"]
+            if not streams: continue
+            # Decode alpha-bearing VP9 using libvpx-vp9 rather than native VP9.
+            decoder=["-c:v","libvpx-vp9"] if any(x.get("codec_name")=="vp9" for x in streams) else []
+            outputs={}
+            for ext,extra in [
+              (".gif",["-filter_complex","[0:v]fps=15,scale=iw:ih:flags=lanczos,split[a][b];[a]palettegen=reserve_transparent=1[p];[b][p]paletteuse=alpha_threshold=64","-loop","0"]),
+              (".webp",["-vf","fps=20,format=yuva420p","-c:v","libwebp_anim","-lossless","0","-loop","0","-an"]),
+              (".png",["-vf","fps=15","-pix_fmt","rgba"])
+            ]:
+              out=p.with_name(p.stem+("_frames_%04d" if ext==".png" else "_animated")+ext)
+              cmd=["ffmpeg","-hide_banner","-loglevel","error","-y"]+decoder+["-i",str(p)]+extra+[str(out)]
+              try:
+                subprocess.run(cmd,check=True,timeout=180)
+                outputs[ext]=str(out)
+                print("CONVERTED",name,ext)
+              except Exception as e:
+                outputs[ext]="failed: "+str(e)
+            entry["converted"]=outputs
+          (root/"manifest.json").write_text(json.dumps(results,indent=2))
+          PY
           cd Vengeance && zip -r ../Vengeance_Collectibles.zip .
       - name: Upload ZIP
         uses: actions/upload-artifact@v4
